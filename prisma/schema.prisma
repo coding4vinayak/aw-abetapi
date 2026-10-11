@@ -1,0 +1,297 @@
+// AbetAPI - Keys, webhooks, usage metering, SSO connections.
+//
+// SQLite by default so the product runs with zero infrastructure.
+// For Postgres: change `provider` to "postgresql" and point DATABASE_URL.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Workspace {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  memberships Membership[]
+  sessions   Session[]
+  invites     Invite[]
+  apiKeys    ApiKey[]
+  webhooks   Webhook[]
+  deliveries Delivery[]
+  requestLogs RequestLog[]
+  ssoConnections SsoConnection[]
+}
+
+/// A workspace credential. Only the sha256 is stored; the plaintext is
+/// shown once at creation and never again.
+model ApiKey {
+  id          String    @id @default(cuid())
+  workspaceId String
+  name        String
+  hashedKey   String    @unique
+  /// First characters, safe to display: "ab_live_a1B2…".
+  prefix      String
+  /// Scopes, e.g. ["keys:write", "events:write"]. "*" means everything.
+  scopes      Json
+  /// Requests per minute this key may make. 0 means unlimited (root only).
+  rateLimitPerMin Int @default(600)
+  lastUsedAt  DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+}
+
+model Webhook {
+  id          String   @id @default(cuid())
+  workspaceId String
+  url         String
+  /// Event types, e.g. ["lead.created"]. Empty means every event.
+  events      Json
+  /// HMAC-SHA256 signing secret, shown once at creation like an API key.
+  secretHash  String
+  secretPrefix String  @default("")
+  isActive    Boolean  @default(true)
+  /// Consecutive failures, reset by any success. Used to auto-disable a
+  /// broken endpoint rather than spending every event on it forever.
+  consecutiveFailures Int @default(0)
+  /// Why it was switched off, so re-enabling is an informed decision.
+  disabledReason String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  deliveries Delivery[]
+
+  @@index([workspaceId, isActive])
+}
+
+/// One delivery attempt. Failures stay on the record with their reason —
+/// a webhook you cannot debug is a webhook nobody trusts.
+model Delivery {
+  id          String   @id @default(cuid())
+  workspaceId String
+  webhookId   String
+  event       String
+  statusCode  Int?
+  ok          Boolean
+  error       String?
+  attempts    Int      @default(1)
+  durationMs  Int?
+  createdAt   DateTime @default(now())
+
+  /// Stable id for the event itself, shared by every attempt and every replay.
+  /// Receivers dedupe on this: at-least-once delivery means a retry is a
+  /// duplicate by design, and the payload will arrive more than once.
+  eventId String?
+  /// The exact bytes sent, kept so a replay reproduces the original delivery
+  /// rather than re-serialising today's view of the data.
+  payload Json?
+  /// PENDING -> DELIVERED | RETRYING | DEAD. See lib/retry.ts.
+  status   String    @default("PENDING")
+  /// When the next attempt becomes due. Null unless status is RETRYING.
+  nextAttemptAt DateTime?
+  lastAttemptAt DateTime?
+  /// When the delivery was parked after exhausting its attempts.
+  deadAt DateTime?
+  /// One entry per attempt, so a failure can be read in detail instead of
+  /// inferred from a single overwritten error string.
+  attemptLog Json?
+  /// The delivery this one was cloned from, when a human asked for a replay.
+  replayedFrom String?
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  webhook   Webhook   @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, createdAt])
+  @@index([webhookId, createdAt])
+
+  /// The worker's only query: rows due for another attempt.
+  @@index([status, nextAttemptAt])
+
+}
+
+/// Per-key request audit: who called what, when, how slow. Powers /api/usage.
+model RequestLog {
+  id          String   @id @default(cuid())
+  workspaceId String
+  keyId       String?
+  method      String
+  path        String
+  status      Int
+  durationMs  Int?
+  createdAt   DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, createdAt])
+  @@index([keyId, createdAt])
+}
+
+/// Fixed-window counter backing per-key rate limits. Rows are pruned when a
+/// bucket is tallied, so a spray of keys cannot grow the table without bound.
+model RateBucket {
+  key         String   @id // "key:<keyId>:<windowStartMinutes>"
+  count       Int      @default(0)
+  windowStart DateTime
+}
+
+/// An SSO connection to a customer IdP. Registry + live discovery check;
+// the interactive login handshake needs the customer's client credentials
+// and is deliberately out of scope until one exists.
+model SsoConnection {
+  id          String    @id @default(cuid())
+  workspaceId String
+  name        String
+  // OIDC only in v1. SAML is a row, not a promise: it stays refused.
+  type        String
+  issuer      String
+  metadataUrl String
+  clientId    String?
+  // UNCHECKED | VERIFIED | FAILED
+  status      String    @default("UNCHECKED")
+  lastCheckedAt DateTime?
+  lastError   String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId])
+}
+
+/// A person who can sign in to the browser UI. Machine access stays with
+/// `ApiKey`; this row is only for the human holding a cookie.
+model User {
+  id           String   @id @default(cuid())
+  /// Stored lowercased. The unique index is what makes signup idempotent at the
+  /// database level rather than only in application code.
+  email        String   @unique
+  name         String?
+  /// scrypt digest, never a plaintext password. See `src/lib/password.ts` for
+  /// why scrypt and not bcrypt or argon2.
+  passwordHash String
+  /// Set true by the verification link. Enforced at sign-in only when a mail
+  /// provider is configured — see `verificationEnforced()` in `lib/email.ts`.
+  emailVerified Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  sessions               Session[]
+  emailVerificationToken EmailVerificationToken?
+  passwordResetTokens    PasswordResetToken[]
+  /// Every workspace this person can open, with the role each seat carries.
+  memberships    Membership[]
+  invitesCreated Invite[]      @relation("InviteCreatedBy")
+}
+
+/// A browser session. The cookie carries a random token and only its sha256 is
+/// stored, so a database dump yields hashes rather than working logins.
+model Session {
+  id          String   @id @default(cuid())
+  userId      String
+  workspaceId String
+  tokenHash   String   @unique
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+/// Per-address attempt counter behind the login and signup forms, so one client
+/// cannot grind through a list of addresses.
+model AuthThrottle {
+  /// "<purpose>:<client address>", e.g. "signin:203.0.113.7".
+  key         String    @id
+  /// Events counted inside the current window: failed guesses, or accounts
+  /// created, depending on which form took the tally.
+  count       Int       @default(0)
+  windowStart DateTime  @default(now())
+  lockedUntil DateTime?
+
+  @@index([windowStart])
+}
+
+/// Single-use email-verification link. Stored hashed, like every other secret
+/// here, so a database dump yields no redeemable links.
+model EmailVerificationToken {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+}
+
+/// Single-use password-reset link. Redeeming it also destroys every session the
+/// user holds, because a reset exists to evict whoever prompted it.
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+}
+
+/// One seat in a workspace. The only membership source of truth — see the
+/// migration note in TEST-REPORT: rows were copied from the old implicit join
+/// table, crediting OWNER to whoever was already there.
+model Membership {
+  id          String   @id @default(cuid())
+  userId      String
+  workspaceId String
+  /// OWNER | ADMIN | MEMBER. Signup creates OWNER; invites can only grant ADMIN
+  /// or MEMBER, so accepting a link can never seize a workspace.
+  role        String   @default("OWNER")
+  createdAt   DateTime @default(now())
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, workspaceId])
+  @@index([workspaceId])
+}
+
+/// A single-use link addressed to one email. Stored hashed, like every other
+/// secret here, so a dump yields no redeemable invitations.
+model Invite {
+  id          String    @id @default(cuid())
+  workspaceId String
+  /// Lowercased. An account that is not this address cannot redeem it.
+  email       String
+  /// ADMIN | MEMBER. OWNER is never issuable.
+  role        String
+  tokenHash   String    @unique
+  createdById String
+  /// Links age out. An invitation left in a chat window or a deleted browser is
+  /// a standing door, and nothing withdraws it when the sender changes their mind.
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  createdAt   DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy User      @relation("InviteCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([email])
+}
