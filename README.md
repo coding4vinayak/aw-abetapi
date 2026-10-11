@@ -1,5 +1,8 @@
 # AbetAPI
 
+![CI](https://github.com/coding4vinayak/aw-abetapi/actions/workflows/ci.yml/badge.svg)
+
+
 The platform underneath the platform: scoped API keys, signed webhooks,
 per-key usage metering and SSO connections — one contract, one audit trail.
 
