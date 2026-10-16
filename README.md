@@ -10,7 +10,9 @@ per-key usage metering and SSO connections — one contract, one audit trail.
 
 ```bash
 npm install
-npx prisma migrate dev      # creates the SQLite database
+cp .env.example .env        # DATABASE_URL points at the compose Postgres
+docker compose up -d        # local Postgres 16
+npx prisma migrate deploy   # applies the committed migrations
 npm run db:seed             # demo workspace + root key (copy it once) + demo key
 npm run dev                 # http://localhost:3700
 ```
@@ -294,6 +296,6 @@ npm start
 ```
 
 Point the load balancer at `GET /api/health` (200 = serving, 503 = DB down).
-For Postgres, follow the same three steps as abetConnect: provider switch,
-fresh migration history, regenerate. Guard the seeded root key like
+Postgres is the runtime provider since `chore/postgres` (provider switch,
+fresh migration history, regenerate — the abetConnect recipe). Guard the seeded root key like
 production data — it has `*` scope and no quota.
