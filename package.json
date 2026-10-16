@@ -14,7 +14,7 @@
     "test": "tsx --test tests/unit/*.test.ts"
   },
   "dependencies": {
-    "@prisma/adapter-better-sqlite3": "^7.10.1",
+    "@prisma/adapter-pg": "^7.10.1",
     "@prisma/client": "^7.10.1",
     "@sentry/nextjs": "^11.6.0",
     "next": "16.4.0",
