@@ -209,7 +209,12 @@ async function recordEndpointHealth(
  * the event is already recorded and the worker will pick it up, rather than
  * being lost with the request that carried it.
  */
-export async function dispatchEvent(workspaceId: string, event: string, data: unknown): Promise<DispatchResult> {
+export async function dispatchEvent(
+  workspaceId: string,
+  event: string,
+  data: unknown,
+  options: { eventId?: string } = {},
+): Promise<DispatchResult> {
   const hooks = await prisma.webhook.findMany({ where: { workspaceId, isActive: true } });
   const matching = hooks.filter((h) => {
     const events = h.events as unknown;
@@ -221,7 +226,13 @@ export async function dispatchEvent(workspaceId: string, event: string, data: un
   let retrying = 0;
 
   for (const hook of matching) {
-    const eventId = randomUUID();
+    // A caller that brought its own event id keeps it: the inbound bridge
+    // passes the sender's delivery id through so a retried webhook can be
+    // recognised (the route checks `Delivery.eventId` before dispatching) and
+    // so every subscriber of one event sees the same `id` in the payload.
+    // Without one — `POST /api/v1/events` — each delivery mints its own, which
+    // is what it always did.
+    const eventId = options.eventId ?? randomUUID();
     const row = await prisma.delivery.create({
       data: {
         workspaceId,

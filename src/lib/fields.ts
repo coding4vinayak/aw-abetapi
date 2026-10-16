@@ -131,11 +131,25 @@ export const EVENT_POST = {
   data: { kind: "json", max: EVENT_PAYLOAD_MAX },
 } as const satisfies Schema;
 
+/** POST /api/v1/inbound/nucrm/{id}. NuCRM's outbound envelope is
+ *  `{ event, timestamp, tenant_id, data }`; the gateway reads two of the four
+ *  and declares all four, so a sender that mis-types a field it thinks it sends
+ *  gets a 422 naming it instead of being silently half-heard. `timestamp` is
+ *  NuCRM's ISO moment — our deliveries carry their own `timestamp`, so this one
+ *  is declared and not interpreted. `data` is optional for the same reason it
+ *  is on `POST /api/v1/events`: an event with no payload is a thing that
+ *  happens, and `{}` is how a sender says so. */
+export const INBOUND_NUCRM_POST = {
+  event: { kind: "text", required: true, max: EVENT_TYPE_MAX, pattern: EVENT_TYPE_PATTERN },
+  timestamp: { kind: "text", max: NAME_MAX },
+  tenant_id: { kind: "text", max: ID_MAX },
+  data: { kind: "json", max: EVENT_PAYLOAD_MAX },
+} as const satisfies Schema;
+
 /** POST /api/webhooks/{id}/deliveries/replay. `status` is a filter on which
  *  parked rows to take, so it is checked as the enum it is: `status: "BOGUS"`
  *  measured as a 404 "Nothing to replay.", which sends a caller looking for
- *  missing deliveries rather than a misspelled word. */
-export const REPLAY_POST = {
+ *  missing deliveries rather than a misspelled word. */export const REPLAY_POST = {
   deliveryId: { kind: "text", max: ID_MAX },
   status: { kind: "enum", values: DELIVERY_STATUSES },
 } as const satisfies Schema;

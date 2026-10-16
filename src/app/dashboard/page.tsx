@@ -1,11 +1,14 @@
 import Link from "next/link";
+import { headers } from "next/headers";
 import { prisma } from "@/lib/db";
 import { DashboardShell } from "@/components/dashboard-shell";
 import { resolveWorkspace } from "@/lib/resolve-workspace";
 import { signOut } from "@/app/auth-actions";
 import { switchWorkspaceAction } from "@/app/member-actions";
 import { createFirstKey } from "@/app/key-actions";
+import { createInboundSource, deleteInboundSource, toggleInboundSource } from "@/app/inbound-actions";
 import { ApiKeyOnboarding } from "@/components/api-key-onboarding";
+import { NucrmBridge } from "@/components/nucrm-bridge";
 import { AiPanel, type AiField } from "@/components/ai-panel";
 
 export const dynamic = "force-dynamic";
@@ -80,7 +83,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     ? await prisma.apiKey.count({ where: { workspaceId: workspace.id, revokedAt: null } })
     : null;
 
-  const [keys, webhooks, deliveries, calls, errors] = await Promise.all([
+  const [keys, webhooks, deliveries, calls, errors, inboundSources] = await Promise.all([
     prisma.apiKey.findMany({
       where: { workspaceId: workspace.id },
       select: { id: true, name: true, prefix: true, scopes: true, rateLimitPerMin: true, lastUsedAt: true, revokedAt: true },
@@ -94,7 +97,16 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     prisma.delivery.count({ where: { workspaceId: workspace.id } }),
     prisma.requestLog.count({ where: { workspaceId: workspace.id } }),
     prisma.requestLog.count({ where: { workspaceId: workspace.id, status: { gte: 400 } } }),
+    prisma.inboundSource.findMany({
+      where: { workspaceId: workspace.id },
+      orderBy: { createdAt: "desc" },
+    }),
   ]);
+
+  // The URL a person pastes into NuCRM has to be the one this deployment
+  // serves, so it is built from the request's own host rather than a constant.
+  const requestHeaders = await headers();
+  const origin = `${requestHeaders.get("x-forwarded-proto") ?? "http"}://${requestHeaders.get("host") ?? "localhost:3700"}`;
 
   return (
     <DashboardShell
@@ -190,6 +202,28 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             </div>
           )}
         </div>
+      {session && workspace.id === session.workspaceId && (
+        // Management is scoped to the workspace the session actually holds:
+        // opening the public demo while signed in must not offer a form whose
+        // actions write into a different workspace than the list shows.
+        <div className="mt-6">
+          <NucrmBridge
+            sources={inboundSources.map((s) => ({
+              id: s.id,
+              name: s.name,
+              secretPrefix: s.secretPrefix,
+              isActive: s.isActive,
+              lastEventAt: s.lastEventAt?.toISOString() ?? null,
+              lastEventName: s.lastEventName,
+              receivedEvents: s.receivedEvents,
+            }))}
+            origin={origin}
+            create={createInboundSource}
+            toggle={toggleInboundSource}
+            remove={deleteInboundSource}
+          />
+        </div>
+      )}
       {session && (
         <div className="mt-6">
           <AiPanel
