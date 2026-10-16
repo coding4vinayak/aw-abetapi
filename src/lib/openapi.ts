@@ -47,6 +47,13 @@ const pathParam = (name: string, description: string): Schema => ({
   required: true,
   schema: { type: "string" },
 });
+const headerParam = (name: string, description: string, required = true): Schema => ({
+  name,
+  in: "header",
+  description,
+  required,
+  schema: { type: "string" },
+});
 const body = (required: string[], properties: Record<string, unknown>, description?: string): Schema => ({
   ...(description ? { description } : {}),
   required: true,
@@ -214,6 +221,43 @@ const paths: Record<string, Schema> = {
         400: malformedBody(),
         401: fails("No key"),
         403: fails("Needs events:write"),
+        422: refusedField(),
+      },
+    },
+  },
+  "/api/v1/inbound/nucrm/{id}": {
+    post: {
+      operationId: "receiveNucrmEvent",
+      summary: "Receive a signed NuCRM webhook and publish it to matching subscriptions",
+      description:
+        "This is the address a NuCRM integration webhook posts to — the receiving end of the bridge, where `POST /api/v1/events` is the publishing end your own code calls. Create a source in the dashboard (Connect NuCRM), then configure the NuCRM integration with this URL, `Authorization: Bearer <key>` plus the integration's secret. The body is NuCRM's envelope; `x-nucrm-signature` is `sha256=` + HMAC-SHA256 of the exact bytes, keyed by the source's secret (the `sha256=` prefix is optional and both spellings verify). `x-nucrm-delivery` deduplicates NuCRM's own retries: a repeat answers `200` with `duplicate: true` and publishes nothing. An accepted event gets one Delivery per matching subscription, counted like `POST /api/v1/events`; a paused source answers 409 and NuCRM parks the delivery after its five attempts.",
+      security: keyAuth,
+      parameters: [
+        pathParam("id", "Inbound source id (dashboard → Connect NuCRM)."),
+        headerParam("x-nucrm-signature", "HMAC-SHA256 of the request body, hex, optionally prefixed `sha256=`."),
+        headerParam(
+          "x-nucrm-delivery",
+          "NuCRM's delivery id. A repeat of one already accepted answers 200 with `duplicate: true`.",
+          false,
+        ),
+      ],
+      requestBody: body(["event"], {
+        event: { type: "string", minLength: 1, maxLength: EVENT_TYPE_MAX, pattern: EVENT_TYPE_PATTERN.source },
+        timestamp: { type: "string", description: "NuCRM's ISO moment. Declared, not interpreted — deliveries carry their own." },
+        tenant_id: { type: "string", maxLength: ID_MAX, description: "NuCRM's tenant. Declared, not interpreted." },
+        data: {
+          description: "The payload every matching subscriber receives, signed. Omit it for none; `null` is refused.",
+          oneOf: [{ type: "object" }, { type: "array" }],
+        },
+      }),
+      responses: {
+        202: ok("Accepted — one Delivery per matching subscription (same receipt as POST /api/v1/events)", { type: "object" }),
+        200: ok("Duplicate delivery: already accepted, nothing published again", { type: "object" }),
+        400: malformedBody(),
+        401: fails("No key, or x-nucrm-signature missing/does not match the source's secret"),
+        403: fails("Needs events:write"),
+        404: fails("No such inbound source in this workspace"),
+        409: fails("Source paused"),
         422: refusedField(),
       },
     },

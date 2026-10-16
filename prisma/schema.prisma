@@ -28,6 +28,7 @@ model Workspace {
   deliveries Delivery[]
   requestLogs RequestLog[]
   ssoConnections SsoConnection[]
+  inboundSources InboundSource[]
 }
 
 /// A workspace credential. Only the sha256 is stored; the plaintext is
@@ -74,6 +75,45 @@ model Webhook {
   deliveries Delivery[]
 
   @@index([workspaceId, isActive])
+}
+
+/// A signed inbound feed from an external system — today, one per NuCRM
+/// integration webhook. The mirror image of `Webhook`: that row names an
+/// address this gateway POSTs to, this one names a sender whose POSTs are
+/// verified before anything is republished.
+///
+/// The secret is the one stored value in this schema that is *not* hashed, and
+/// it is deliberate: verification recomputes HMAC-SHA256 with the exact key the
+/// sender signed with, and NuCRM's signer keys its HMAC with the raw secret.
+/// Hashing is not an option the way it is for `Webhook`, where this gateway is
+/// both the storer and the signer and the two sides can meet at the hash.
+/// A database that leaks yields a key that can forge *inbound* events for this
+/// one workspace, which is the same blast radius as the sender's own config
+/// table carrying it — nuCRM stores it exactly as plainly.
+model InboundSource {
+  id          String   @id @default(cuid())
+  workspaceId String
+  name        String
+  /// The verification scheme and envelope this source speaks. NuCRM is the
+  /// only value today; a second provider gets its own row here, not a column.
+  provider    String   @default("nucrm")
+  /// The HMAC key the sender signs with. Shown once at creation.
+  secret      String
+  /// First characters, safe to display: "in_live_a1B2…".
+  secretPrefix String  @default("")
+  isActive    Boolean  @default(true)
+  /// What the dashboard reads to say "connected": the last accepted event and
+  /// how many have arrived. Duplicates do not count — they republished nothing.
+  lastEventAt   DateTime?
+  lastEventName String?
+  receivedEvents Int    @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId])
 }
 
 /// One delivery attempt. Failures stay on the record with their reason —

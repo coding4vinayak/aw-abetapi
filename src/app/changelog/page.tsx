@@ -16,6 +16,16 @@ export default function Page() {
         <div className="mt-8 space-y-8 border-l-2 border-blue-600 pl-6">
           <div>
             <p className="text-sm text-gray-600">October 2026</p>
+            <h2 className="text-lg font-bold">v1.1.0 — The NuCRM bridge: signed inbound events</h2>
+            <ul className="mt-2 list-disc space-y-1 pl-5 text-gray-600">
+              <li>New endpoint: <code>POST /api/v1/inbound/nucrm/&#123;id&#125;</code>. Point a NuCRM integration webhook at it and every verified event is republished to your matching subscriptions — one Delivery per subscriber, with the same retries, logs and receipts as <code>POST /api/v1/events</code>. The receiver verifies <code>x-nucrm-signature</code> (HMAC-SHA256 over the raw body, <code>sha256=</code> prefix optional) against the source&apos;s secret before anything fans out, and <code>x-nucrm-delivery</code> answers a repeat of NuCRM&apos;s own retry with <code>duplicate: true</code> instead of publishing twice.</li>
+              <li>Authentication is deliberately two credentials that answer different questions: your workspace key (scope <code>events:write</code>) carries the quota, the audit trail and the revocation, and the source&apos;s secret proves the body is NuCRM&apos;s. NuCRM&apos;s integration config sends custom headers, so both travel in one configured webhook.</li>
+              <li>The dashboard has a <strong>Connect NuCRM</strong> panel: create a source, copy its URL and secret (shown once), pause it, delete it, and see the last accepted event per source.</li>
+              <li>Additive only: no existing request behaves differently, and both new <code>200</code>/<code>202</code>/<code>409</code> answers are documented in <code>/api/v1/openapi</code>, which is a minor release by the rule below — no 30 days&apos; notice needed because nothing existing changed.</li>
+            </ul>
+          </div>
+          <div>
+            <p className="text-sm text-gray-600">October 2026</p>
             <h2 className="text-lg font-bold">v1.0.2 — The contract now says what the gateway answers</h2>
             <ul className="mt-2 list-disc space-y-1 pl-5 text-gray-600">
               <li>Every endpoint that requires a write scope can answer <code>403</code> to a key that holds an unrelated one — <code>requireKey</code> has always returned it, and since the last release it is written to the request log. But <code>/api/v1/openapi</code> listed that <code>403</code> on only three of the ten scoped operations; a client coding strictly against the document would have treated it as undeclared. All ten list it now. The read endpoints, which ask no scope and so cannot be refused for scope, still list no <code>403</code> — that is correct, and a new test fails if the document and the code&apos;s real scope checks ever drift apart again.</li>

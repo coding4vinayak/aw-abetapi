@@ -1,5 +1,6 @@
 import { prisma } from "../src/lib/db";
 import { generateApiKey } from "../src/lib/keys";
+import { generateInboundSecret } from "../src/lib/inbound";
 
 async function main() {
   console.log("Seeding AbetAPI...");
@@ -39,9 +40,23 @@ async function main() {
     },
   });
 
+  // A demo inbound source so the NuCRM half of the bridge is explorable
+  // locally: sign a payload with this secret and POST it at the printed path.
+  const inbound = generateInboundSecret();
+  await prisma.inboundSource.deleteMany({ where: { workspaceId: workspace.id, name: "NuCRM (demo)" } });
+  const source = await prisma.inboundSource.create({
+    data: {
+      workspaceId: workspace.id,
+      name: "NuCRM (demo)",
+      secret: inbound.plaintext,
+      secretPrefix: inbound.prefix,
+    },
+  });
+
   console.log("Root key (copy now, never shown again):", plaintext);
   console.log("Demo key (events:write, 60/min):", demo.plaintext);
   console.log("Root id:", root.id);
+  console.log(`NuCRM inbound source: ${source.id} — secret (demo only):`, inbound.plaintext);
   console.log("Seeding complete!");
 }
 

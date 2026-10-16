@@ -197,6 +197,28 @@ Nobody ever recovers a secret from the database, and both sides still meet.
 Rotate via `PATCH /api/webhooks/{id} { rotate: true }` — the old secret dies
 with the response that carries the new one.
 
+## Inbound — NuCRM and other signed senders
+
+`POST /api/v1/inbound/nucrm/{id}` is the bridge's receiving end: point a NuCRM
+integration webhook at a source (dashboard → **Connect NuCRM**) and every
+verified event is republished to matching subscriptions — one Delivery per
+subscriber, with the retries, receipts and audit trail above.
+
+The request carries two credentials on purpose. Your workspace key
+(`Authorization: Bearer …`, scope `events:write`) is the tenant, the quota and
+the audit trail; `x-nucrm-signature` — HMAC-SHA256 over the exact body keyed by
+the source's secret, the `sha256=` prefix optional — is what proves the body is
+NuCRM's. NuCRM's integration config sends custom headers, so both travel in one
+configured webhook.
+
+NuCRM retries its webhooks, so `x-nucrm-delivery` deduplicates: a repeat of a
+delivery id already accepted answers `200 {duplicate: true}` and publishes
+nothing. An accepted event answers `202` with the same receipt as
+`POST /api/v1/events`; a signature that does not verify is refused `401` before
+anything fans out, and the refusal is logged like every other one. The two-way
+guide — setup steps, a verifier to paste, both signature schemes side by side —
+lives in [`docs/nucrm.md`](docs/nucrm.md).
+
 ## API
 
 ```
@@ -210,6 +232,7 @@ GET    /api/keys/{id}                      # one key
 PATCH  /api/keys/{id}                      # rename, re-scope, re-limit
 DELETE /api/keys/{id}                      # revoke now
 POST   /api/v1/events                      # publish (needs events:write)
+POST   /api/v1/inbound/nucrm/{id}          # receive one signed NuCRM event (needs events:write)
 GET    /api/webhooks                       # subscriptions, secrets never listed
 POST   /api/webhooks                       # subscribe (needs webhooks:write)
 GET    /api/webhooks/{id}                  # one subscription
