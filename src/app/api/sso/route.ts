@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import type { SsoConnection } from "@prisma/client";
+import type { SsoConnection } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
 import { classifyTarget } from "@/lib/egress";
 import { requireKey, logSuccess, conflictFor } from "@/lib/auth";
