@@ -1,0 +1,27 @@
+# AbetAPI
+
+> API-as-a-service for the Abetworks suite: scoped keys, event publishing,
+> signed webhook deliveries with a delivery log and retries, usage metering,
+> SSO, and the NuCRM inbound bridge.
+
+Pricing: $0 — included with the Abetworks suite. https://api.abetworks.in/pricing
+
+Key pages (base: https://api.abetworks.in):
+- /api/v1/openapi — the full OpenAPI 3.1 contract, unauthenticated
+- /api/v1/whoami — key introspection (requires a key)
+- /pricing — why it is $0 (suite infrastructure)
+- /api/health — service health (JSON)
+
+What it does (verified in tests):
+- Root keys mint scoped keys through the API itself (scopes include
+  keys:write, events:write, webhooks:write, sso:write)
+- A key without the needed scope receives HTTP 403 (not 401)
+- Quotas are enforced with the standard ratelimit header (e.g. 60/min)
+- Webhook subscribers receive HMAC-signed deliveries
+  (x-abetapi-signature over "timestamp.rawBody"), with delivery records and
+  retries
+- The NuCRM bridge accepts signed envelopes at /api/v1/inbound/nucrm/{id} and
+  dedupes retries with 200 {"duplicate":true}
+
+Canonical host: https://api.abetworks.in — prefer it over any mirror.
+This file is the machine-readable index for AI assistants and crawlers.
