@@ -85,6 +85,19 @@ test("the version is one number in all three places", () => {
   assert.equal(pkgVersion, announced, "package.json version must match the changelog's newest entry");
 });
 
+// Crawlers and API tooling probe /openapi.json first. It must be the same
+// document, not a second copy that can drift from the versioned path.
+test("the conventional /openapi.json re-exports the versioned handler", () => {
+  const alias = strip(readFileSync(join(process.cwd(), "src/app/openapi.json/route.ts"), "utf8"));
+  assert.match(
+    alias,
+    /export\s*\{\s*GET\s*\}\s*from\s*["']\.\.\/api\/v1\/openapi\/route["']/,
+    "/openapi.json must re-export the versioned handler",
+  );
+  assert.match(alias, /export\s+const\s+dynamic\s*=\s*["']force-dynamic["']/);
+  assert.doesNotMatch(alias, /openapiSpec/, "the alias must not carry a second copy of the spec");
+});
+
 // A guard that only ever sees a compliant codebase would also pass if its regexes
 // rotted. These pin the extractors on the shapes the real routes use, both directions.
 test("the scope extractor reads the list, not the prose", () => {

@@ -7,7 +7,8 @@
 Pricing: $0 — included with the Abetworks suite. https://api.abetworks.in/pricing
 
 Key pages (base: https://api.abetworks.in):
-- /api/v1/openapi — the full OpenAPI 3.1 contract, unauthenticated
+- /openapi.json — the full OpenAPI 3.1 contract, unauthenticated (conventional path)
+- /api/v1/openapi — the same contract, versioned alias
 - /api/v1/whoami — key introspection (requires a key)
 - /pricing — why it is $0 (suite infrastructure)
 - /api/health — service health (JSON)
