@@ -49,7 +49,9 @@ export async function POST(request: Request) {
     where: { workspaceId_name: { workspaceId: auth.key.workspaceId, name } },
   });
   if (existing) {
-    return NextResponse.json({ error: { code: "conflict", message: "A connection with that name exists." } }, { status: 409 });
+    return refused(
+      NextResponse.json({ error: { code: "conflict", message: "A connection with that name exists." } }, { status: 409 }),
+    );
   }
 
   let conn: SsoConnection;

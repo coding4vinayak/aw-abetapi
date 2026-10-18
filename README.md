@@ -17,12 +17,14 @@ npm run db:seed             # demo workspace + root key (copy it once) + demo ke
 npm run dev                 # http://localhost:3700
 ```
 
-`npm run test` runs 109 unit tests across ten files — key shape, scopes,
-webhook signatures, retry, pagination, password and email handling, plus two
+`npm run test` runs 187 unit tests across twenty files — key shape, scopes,
+webhook signatures, retry, pagination, password and email handling, plus three
 guards that read the route sources themselves: one that every handler
 authenticates, one that every handler which reads a body checks it against a
-declared field table. No server and no database: the guards are static, so a
-forgotten route fails at the pull request rather than in production.
+declared field table, and one that every refusal an authed route raises is
+logged before it leaves. No server and no database: the guards are static, so a
+forgotten route, an unvalidated field or an unlogged refusal fails at the pull
+request rather than in production.
 
 ## Accounts (browser)
 
@@ -253,7 +255,9 @@ POST   /api/sso/{id}/check                 # live OIDC discovery check, now
 ```
 
 Every authed outcome — including 401s, 403s and 429s — lands in the request
-log, which is what `/api/usage` reads. An audit trail with holes is where
+log, which is what `/api/usage` reads. A revoked key's refusals land under that
+key, so a leaked credential somebody keeps trying shows up as itself rather
+than vanishing. An audit trail with holes is where
 abuse hides. The `{id}` routes' own "no such row" 404s do too: they answer
 through `notFound()` (`lib/auth.ts`), which writes the log row before
 returning, so a probe enumerating key, webhook or SSO ids is visible next to a
