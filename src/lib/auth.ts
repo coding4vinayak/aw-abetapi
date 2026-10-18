@@ -70,8 +70,18 @@ export async function requireKey(
     where: { hashedKey: hashKey(token) },
     include: { workspace: true },
   });
-  if (!record || record.revokedAt) {
+  if (!record) {
     return fail(401, "authentication_error", "Invalid or revoked API key.");
+  }
+  if (record.revokedAt) {
+    // The row survives a revoke for exactly this: the audit trail must show a
+    // key still being used after it was killed, or a leaked credential someone
+    // keeps trying is invisible. The record is in hand, so this refusal is
+    // attributable and goes in the log like every other outcome. The message
+    // stays identical to an unknown token's — the two must be
+    // indistinguishable to the caller, which is why the log is the only place
+    // it can show.
+    return fail(401, "authentication_error", "Invalid or revoked API key.", record.workspaceId, record.id);
   }
   if (!safeEqual(record.hashedKey, hashKey(token))) {
     return fail(401, "authentication_error", "Invalid API key.");

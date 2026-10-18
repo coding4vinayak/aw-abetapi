@@ -86,9 +86,11 @@ export async function POST(request: Request) {
     where: { workspaceId: auth.key.workspaceId, revokedAt: null },
   });
   if (live >= 20) {
-    return NextResponse.json(
-      { error: { code: "conflict", message: "This workspace already has 20 live keys. Revoke one first." } },
-      { status: 409 },
+    return refused(
+      NextResponse.json(
+        { error: { code: "conflict", message: "This workspace already has 20 live keys. Revoke one first." } },
+        { status: 409 },
+      ),
     );
   }
 
