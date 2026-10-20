@@ -129,6 +129,29 @@ apps during the Abetworks campaign. The vendoring scripts and drift gate that en
 identity are retired. This app's copy is its own and can evolve independently.
 Full context: `abetworks-history` §8.20 and §8.44.
 
+## Export
+
+The terms say a workspace owner can export anytime, and the privacy page tells a
+departing customer to take a copy first. Three session-authenticated doors make
+that true:
+
+| Door | What it returns |
+| --- | --- |
+| `GET /api/export` | Workspace JSON: team, invitations, API keys (scopes, rate limits), webhook destinations, inbound sources, SSO connections. It names the delivery and request-log counts and points at the streams. |
+| `GET /api/export/deliveries` | Delivery audit as streamed CSV: one row per delivery attempt with its payload, status code, error and attempt log, paged by id in batches. |
+| `GET /api/export/requestlogs` | Usage audit as streamed CSV: one row per API call with method, path, status and latency, paged by id in batches. |
+
+All three are owner/admin only: a member gets `403`, anonymous `401`. They leave
+credentials behind — password digests, session tokens, API keys and their hashes,
+invitation token hashes, webhook secret hashes, inbound source HMAC secrets, SSO
+client secrets and Stripe ids. A webhook row keeps its destination/events and
+drops its signing key hash; an inbound source keeps its provider/config and drops
+its secret; an SSO connection keeps its issuer/metadata and drops its client
+secret. Downloads are `no-store` and `nosniff`; the filename is sanitised from
+the workspace slug. CSV text starting `=`, `+`, `-`, `@`, tab or CR is prefixed
+with an apostrophe, so a delivery error or request path cannot become a
+spreadsheet formula.
+
 ## Keys
 
 `POST /api/keys` mints `ab_live_…` with explicit scopes (`keys:write`,
@@ -252,6 +275,9 @@ GET    /api/sso/{id}                       # one connection
 PATCH  /api/sso/{id}                       # edit (metadata change re-arms check)
 DELETE /api/sso/{id}                       # remove
 POST   /api/sso/{id}/check                 # live OIDC discovery check, now
+GET    /api/export                         # workspace JSON (session; owner/admin)
+GET    /api/export/deliveries              # delivery audit CSV, streamed (session; owner/admin)
+GET    /api/export/requestlogs             # usage audit CSV, streamed (session; owner/admin)
 ```
 
 Every authed outcome — including 401s, 403s and 429s — lands in the request

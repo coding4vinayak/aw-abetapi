@@ -16,6 +16,14 @@ export default function Page() {
         <div className="mt-8 space-y-8 border-l-2 border-blue-600 pl-6">
           <div>
             <p className="text-sm text-gray-600">October 2026</p>
+            <h2 className="text-lg font-bold">v1.2.0 — Take the gateway with you</h2>
+            <ul className="mt-2 list-disc space-y-1 pl-5 text-gray-600">
+              <li>Owners and admins can download a workspace JSON with API keys, webhook destinations, inbound sources, SSO connections and team.</li>
+              <li>Delivery and usage audits download as streamed CSV: one row per delivery attempt with its payload and attempt log, and one row per API call with method, path, status and latency. API key hashes, webhook secret hashes, inbound source secrets, SSO client secrets and invitation tokens are never included.</li>
+            </ul>
+          </div>
+          <div>
+            <p className="text-sm text-gray-600">October 2026</p>
             <h2 className="text-lg font-bold">v1.1.0 — The NuCRM bridge: signed inbound events</h2>
             <ul className="mt-2 list-disc space-y-1 pl-5 text-gray-600">
               <li>New endpoint: <code>POST /api/v1/inbound/nucrm/&#123;id&#125;</code>. Point a NuCRM integration webhook at it and every verified event is republished to your matching subscriptions — one Delivery per subscriber, with the same retries, logs and receipts as <code>POST /api/v1/events</code>. The receiver verifies <code>x-nucrm-signature</code> (HMAC-SHA256 over the raw body, <code>sha256=</code> prefix optional) against the source&apos;s secret before anything fans out, and <code>x-nucrm-delivery</code> answers a repeat of NuCRM&apos;s own retry with <code>duplicate: true</code> instead of publishing twice.</li>

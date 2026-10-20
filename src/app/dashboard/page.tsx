@@ -8,6 +8,7 @@ import { switchWorkspaceAction } from "@/app/member-actions";
 import { createFirstKey } from "@/app/key-actions";
 import { createInboundSource, deleteInboundSource, toggleInboundSource } from "@/app/inbound-actions";
 import { ApiKeyOnboarding } from "@/components/api-key-onboarding";
+import { canManageRoles } from "@/lib/roles";
 import { NucrmBridge } from "@/components/nucrm-bridge";
 import { AiPanel, type AiField } from "@/components/ai-panel";
 
@@ -138,6 +139,44 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             sub={calls > 0 ? `${((errors / calls) * 100).toFixed(1)}% errors` : "no traffic yet"}
           />
         </div>
+
+        {session && session.workspaceId === workspace.id && canManageRoles(session.role) && (
+          <div className="mb-6 rounded-2xl bg-white p-6 shadow-sm">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <h2 className="text-lg font-bold text-gray-900">Export</h2>
+              <p className="text-xs text-gray-500">Owners and admins</p>
+            </div>
+            <p className="mt-1 max-w-3xl text-sm text-gray-600">
+              The workspace JSON carries API keys, webhook destinations, inbound sources, SSO
+              connections and team. The delivery audit and usage audit are streamed as CSV so a
+              high-volume workspace never has to fit in memory.
+            </p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <a
+                href="/api/export"
+                className="rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-teal-700"
+              >
+                Download workspace (JSON)
+              </a>
+              <a
+                href="/api/export/deliveries"
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50"
+              >
+                Download delivery audit (CSV)
+              </a>
+              <a
+                href="/api/export/requestlogs"
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50"
+              >
+                Download usage audit (CSV)
+              </a>
+            </div>
+            <p className="mt-3 text-xs text-gray-500">
+              API key hashes, webhook secret hashes, inbound source secrets, SSO client
+              secrets and invitation tokens are never included.
+            </p>
+          </div>
+        )}
 
         <div className="bg-white rounded-2xl shadow-sm p-6 mb-6">
           <h2 className="text-lg font-bold text-gray-900 mb-4">API keys</h2>
