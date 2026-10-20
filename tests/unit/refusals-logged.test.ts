@@ -38,6 +38,12 @@ const MAX_LITERALS = 45;
 const NO_WORKSPACE: Record<string, string> = {
   "src/app/api/health/route.ts":
     "the liveness probe is unauthenticated by design — there is no tenant this refusal could name",
+  "src/app/api/export/route.ts":
+    "session-authenticated export door; no API key to attribute — the request log is for keyed traffic",
+  "src/app/api/export/deliveries/route.ts":
+    "session-authenticated export door; no API key to attribute — the request log is for keyed traffic",
+  "src/app/api/export/requestlogs/route.ts":
+    "session-authenticated export door; no API key to attribute — the request log is for keyed traffic",
 };
 
 function* routeFiles(dir: string): Generator<string> {

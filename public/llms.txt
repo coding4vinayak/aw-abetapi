@@ -23,6 +23,8 @@ What it does (verified in tests):
   retries
 - The NuCRM bridge accepts signed envelopes at /api/v1/inbound/nucrm/{id} and
   dedupes retries with 200 {"duplicate":true}
+- Owners and admins can take a workspace JSON and streamed delivery/usage CSVs;
+  API key hashes, webhook secrets, inbound secrets, SSO secrets and tokens stay behind
 
 Canonical host: https://api.abetworks.in — prefer it over any mirror.
 This file is the machine-readable index for AI assistants and crawlers.
