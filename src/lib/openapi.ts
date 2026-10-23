@@ -29,6 +29,17 @@ import {
 
 type Schema = Record<string, unknown>;
 
+type Method = "get" | "post" | "patch" | "put" | "delete";
+
+interface Operation {
+  /** A stable name for the call — the operationId an SDK would generate. */
+  id: string;
+  /** One line, said the way the README says it. */
+  summary: string;
+  /** The auth the route enforces. */
+  auth?: "key" | "session" | "none" | "stripe" | "session-or-key";
+}
+
 const ref = (name: string): Schema => ({ $ref: `#/components/schemas/${name}` });
 const media = (schema: Schema): Schema => ({ content: { "application/json": { schema } } });
 const ok = (description: string, schema: Schema): Schema => ({ description, ...media(schema) });
@@ -514,3 +525,13 @@ export const openapiSpec = {
 } as const;
 
 export type OpenApiSpec = typeof openapiSpec;
+
+/** The operations, flattened: what the contract check reasons about. */
+export const openapiOperations: { path: string; method: Method; operation: Operation }[] =
+  Object.entries(paths).flatMap(([path, item]) =>
+    Object.entries(item).map(([method, operation]) => ({
+      path,
+      method: method as Method,
+      operation: operation as Operation,
+    })),
+  );
