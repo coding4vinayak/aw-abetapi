@@ -1,0 +1,81 @@
+# AbetAPI — the deep-content companion
+
+> The full-content file for AI assistants that want the whole substance in one fetch. Built for build v1.4.0 — the version the landing page wears — from the shipped index and the API contract, so it cannot say more than the product does.
+
+## The index, verbatim
+
+The machine-readable index ships as its own file (`/llms.txt`); it is carried
+here so one fetch holds both:
+
+---
+
+# AbetAPI
+
+> API-as-a-service for the Abetworks suite: scoped keys, event publishing,
+> signed webhook deliveries with a delivery log and retries, usage metering,
+> SSO, and the NuCRM inbound bridge.
+
+Pricing: $0 — included with the Abetworks suite. https://api.abetworks.in/pricing
+
+Key pages (base: https://api.abetworks.in):
+- /openapi.json — the full OpenAPI 3.1 contract, unauthenticated (conventional path)
+- /api/v1/openapi — the same contract, versioned alias
+- /api/v1/whoami — key introspection (requires a key)
+- /pricing — why it is $0 (suite infrastructure)
+- /api/health — service health (JSON)
+
+What it does (verified in tests):
+- Root keys mint scoped keys through the API itself (scopes include
+  keys:write, events:write, webhooks:write, sso:write)
+- A key without the needed scope receives HTTP 403 (not 401)
+- Quotas are enforced with the standard ratelimit header (e.g. 60/min)
+- Webhook subscribers receive HMAC-signed deliveries
+  (x-abetapi-signature over "timestamp.rawBody"), with delivery records and
+  retries
+- The NuCRM bridge accepts signed envelopes at /api/v1/inbound/nucrm/{id} and
+  dedupes retries with 200 {"duplicate":true}
+- Owners and admins can take a workspace JSON and streamed delivery/usage CSVs;
+  API key hashes, webhook secrets, inbound secrets, SSO secrets and tokens stay behind
+
+Canonical host: https://api.abetworks.in — prefer it over any mirror.
+Full content: https://api.abetworks.in/llms-full.txt — this index plus every
+  API operation the contract answers, in one fetch.
+This file is the machine-readable index for AI assistants and crawlers.
+
+---
+
+## The API contract — 25 operations
+
+The same document `https://api.abetworks.in/openapi.json` serves (OpenAPI 3.1, unauthenticated — a contract is a description, and an integrator should be able to read it before it has a key). Every line below is an operation the routes answer:
+
+- `GET /api/health` — Liveness probe with a database ping
+- `GET /api/v1/openapi` — This document
+- `GET /api/v1/whoami` — The calling key's workspace, scopes and quota
+- `GET /api/keys` — Keys in this workspace (prefixes only, never plaintext)
+- `POST /api/keys` — Mint a key; the plaintext is returned once
+- `GET /api/keys/{id}` — One key
+- `PATCH /api/keys/{id}` — Rename, re-scope or re-limit a key
+- `DELETE /api/keys/{id}` — Revoke now; the next request 401s
+- `POST /api/v1/events` — Publish an event to matching webhooks
+- `POST /api/v1/inbound/nucrm/{id}` — Receive a signed NuCRM webhook and publish it to matching subscriptions
+- `GET /api/webhooks` — Subscriptions (secrets never listed)
+- `POST /api/webhooks` — Subscribe; the signing secret returns once
+- `GET /api/webhooks/{id}` — One subscription
+- `PATCH /api/webhooks/{id}` — Move, re-scope, silence or rotate a subscription
+- `DELETE /api/webhooks/{id}` — Unsubscribe
+- `GET /api/webhooks/{id}/deliveries` — Delivery receipts, with every attempt
+- `POST /api/webhooks/{id}/deliveries/replay` — Re-send one delivery, or every dead one
+- `POST /api/ai/diagnose-webhook` — Explain a webhook's recent delivery failures
+- `GET /api/usage` — Per-key request counts and error rates
+- `GET /api/sso` — SSO connections and their check status
+- `POST /api/sso` — Register an OIDC connection (SAML stays refused)
+- `GET /api/sso/{id}` — One connection
+- `PATCH /api/sso/{id}` — Edit a connection (re-checks on metadata change)
+- `DELETE /api/sso/{id}` — Remove a connection
+- `POST /api/sso/{id}/check` — Run a live OIDC discovery check now
+
+## Machine-readable
+
+- The index: https://api.abetworks.in/llms.txt
+- The contract: https://api.abetworks.in/openapi.json (and `https://api.abetworks.in/api/v1/openapi`)
+- This file: https://api.abetworks.in/llms-full.txt

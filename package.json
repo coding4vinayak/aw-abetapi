@@ -1,6 +1,6 @@
 {
   "name": "abetapi",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "private": true,
   "scripts": {
     "dev": "next dev -p 3700",
@@ -11,7 +11,9 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
-    "test": "tsx --test tests/unit/*.test.ts"
+    "test": "tsx --test tests/unit/*.test.ts",
+    "check:llms-full": "tsx scripts/build-llms-full.mts --check",
+    "build:llms-full": "tsx scripts/build-llms-full.mts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.1",

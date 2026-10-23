@@ -252,6 +252,21 @@ lives in [`docs/nucrm.md`](docs/nucrm.md).
 GET    /api/health                         # liveness + DB ping, no key
 GET    /login                                # sign in (see Accounts)
 GET    /api/v1/openapi                     # this contract, no key
+GET    /llms-full.txt                      # deep content: index + all 25 ops
+GET    /api/v1/whoami                      # key identity + live quota
+```
+
+**The deep-content file**: `GET /llms-full.txt` carries the shipped index
+(`llms.txt`) verbatim and then every operation the contract answers, each with
+its own summary and the door it declares — built from those two sources, not
+from hand-written prose, so it cannot say more than the product does.
+`npm run check:llms-full` (in CI) fails naming the first line that moved
+against a stale index or contract; rebuild with `npm run build:llms-full`.
+
+```
+GET    /api/health                         # liveness + DB ping, no key
+GET    /login                                # sign in (see Accounts)
+GET    /api/v1/openapi                     # this contract, no key
 GET    /api/v1/whoami                      # key identity + live quota
 GET    /api/keys                           # list (prefixes only)
 POST   /api/keys                           # mint (needs keys:write)
