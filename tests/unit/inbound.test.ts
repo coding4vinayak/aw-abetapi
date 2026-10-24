@@ -6,6 +6,9 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { authSites } from "./route-handlers";
 import {
   INBOUND_SECRET_PREFIX,
   generateInboundSecret,
@@ -93,5 +96,58 @@ describe("inbound envelope parsing", () => {
     const parsed = parseInboundEnvelope("{}");
     assert.equal(parsed.ok, true);
     if (parsed.ok) assert.deepEqual(parsed.body, {});
+  });
+});
+
+// The two auth doors of `POST /api/v1/inbound/nucrm/{id}`, pinned at the
+// source and contract level the way this repo pins route behavior the unit
+// layer cannot reach (no database under `npm test`). The measured fact that
+// moved the route: NuCRM's integration webhook config is `{ url, events,
+// secret }` — no custom-header field — so a route that demanded a Bearer key
+// could never be delivered to by NuCRM itself.
+describe("the bridge's auth doors", () => {
+  const route = readFileSync(join(import.meta.dirname, "..", "..", "src", "app", "api", "v1", "inbound", "nucrm", "[id]", "route.ts"), "utf8");
+  const keyedBranch = /if \(keyed\) \{([\s\S]*?)\n  \} else \{/.exec(route)?.[1] ?? "";
+  const plainBranch = /\} else \{([\s\S]*?)\n  \}\n\n  const refused/.exec(route)?.[1] ?? "";
+
+  it("splits into exactly two entry doors", () => {
+    assert.ok(keyedBranch, "the keyed branch must be an `if (keyed) { … } else { … }`");
+    assert.ok(plainBranch, "the signature-only branch must follow it");
+    assert.match(route, /const bearer|const keyed =\s*\n?\s*request\.headers\.get\("authorization"\)/);
+  });
+
+  it("only the keyed door goes through requireKey", () => {
+    // `authSites` tokenizes (comments and strings masked), so a comment that
+    // merely mentions requireKey cannot pass for a check the way a regex would.
+    const wrap = (body: string) => `{\n${body}\n}`;
+    const keyedAuths = authSites(wrap(keyedBranch)).map((a) => a.name);
+    const plainAuths = authSites(wrap(plainBranch)).map((a) => a.name);
+    assert.ok(keyedAuths.includes("requireKey"), `keyed door must call requireKey, saw: ${keyedAuths}`);
+    assert.deepEqual(plainAuths, [], `signature-only door must not consult a key, saw: ${plainAuths}`);
+    assert.match(keyedBranch, /await requireKey\(request, \["events:write"\]\)/);
+  });
+
+  it("both doors rejoin ahead of one shared signature gate", () => {
+    const gate = route.indexOf("verifyInboundSignature(source.secret, raw, signature)");
+    assert.ok(gate > route.indexOf("const refused"), "the gate lives in the shared path, not inside a door");
+    assert.ok(gate > route.lastIndexOf("workspaceId = source.workspaceId;"), "both doors have resolved their workspace by then");
+  });
+
+  it("a present key that fails authentication is the response, never a downgrade", () => {
+    assert.match(keyedBranch, /if \(!auth\.ok\) return auth\.response;/);
+  });
+
+  it("reads both spellings of the signature and delivery headers", () => {
+    assert.match(route, /headers\.get\("x-nucrm-signature"\)\s*\?\?\s*request\.headers\.get\("x-webhook-signature"\)/);
+    assert.match(route, /headers\.get\("x-nucrm-delivery"\)\s*\?\?\s*request\.headers\.get\("x-webhook-delivery"\)/);
+  });
+
+  it("the published contract declares the key optional", () => {
+    const text = readFileSync(join(import.meta.dirname, "..", "..", "src", "lib", "openapi.ts"), "utf8");
+    const entry = /"\/api\/v1\/inbound\/nucrm\/\{id\}": \{\s*post: \{([\s\S]*?)\n      responses: \{/.exec(text);
+    assert.ok(entry, "the inbound operation is declared");
+    assert.doesNotMatch(entry[1], /security: keyAuth/, "the endpoint must not demand a key in the contract");
+    assert.match(entry[1], /"authorization"/, "the optional key door is documented as a header");
+    assert.match(entry[1], /optional/i, "the description says the key is optional");
   });
 });

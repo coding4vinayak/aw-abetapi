@@ -16,6 +16,16 @@ export default function Page() {
         <div className="mt-8 space-y-8 border-l-2 border-blue-600 pl-6">
           <div>
             <p className="text-sm text-gray-600">October 2026</p>
+            <h2 className="text-lg font-bold">v1.4.1 — The NuCRM bridge speaks NuCRM&rsquo;s language</h2>
+            <ul className="mt-2 list-disc space-y-1 pl-5 text-gray-600">
+              <li>The inbound bridge now authenticates on the source&rsquo;s HMAC signature alone. Measured against NuCRM&rsquo;s <code>main</code>: its integration webhook config is <code>&#123; url, events, secret &#125;</code> with no custom-header field, so it could never attach the API key the route demanded &mdash; every real NuCRM delivery was a 401 against a contract the docs called drop-in. A <code>Bearer</code> key is still honored (and still must authenticate, with the source in its workspace) for forwarders relaying on NuCRM&rsquo;s behalf.</li>
+              <li>Additive: <code>x-webhook-signature</code> and <code>x-webhook-delivery</code> &mdash; the spelling of NuCRM&rsquo;s plugin receiver &mdash; verify and dedupe exactly like <code>x-nucrm-signature</code> and <code>x-nucrm-delivery</code>.</li>
+              <li><code>docs/nucrm.md</code> was rewritten against the measured wire, not assumptions: NuCRM&rsquo;s envelope carries an <b>ISO</b> <code>timestamp</code> and a <code>tenant_id</code> (declared, not forwarded), its <b>retries</b> replay the original signature over re-serialized JSONB bytes &mdash; which is why dedupe keys on the delivery id &mdash; and its SSRF guard refuses private targets, so the bridge endpoint must be public HTTPS.</li>
+              <li>No existing request changes behavior: key-carrying deliveries follow the same path as before. Relaxing a requirement is additive by the rule below, so no version bump is owed beyond this patch.</li>
+            </ul>
+          </div>
+          <div>
+            <p className="text-sm text-gray-600">October 2026</p>
             <h2 className="text-lg font-bold">v1.4.0 — The deep-content file</h2>
             <ul className="mt-2 list-disc space-y-1 pl-5 text-gray-600">
               <li><code>/llms-full.txt</code> serves the whole substance in one fetch for AI assistants: the shipped index carried verbatim, then every one of the contract&rsquo;s 25 operations with its own summary and the door it declares. Built from the index and the contract themselves, not from hand-written prose, so it cannot say more than the product does.</li>

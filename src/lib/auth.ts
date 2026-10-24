@@ -21,7 +21,7 @@ function extractToken(request: Request): string | undefined {
   return undefined;
 }
 
-async function logRequest(
+export async function logRequest(
   workspaceId: string,
   keyId: string | undefined,
   request: Request,

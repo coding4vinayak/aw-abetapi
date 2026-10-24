@@ -6,8 +6,12 @@ Prisma by default — the wire is the only meeting point, and everything here is
 about that wire.
 
 There are two directions, and they do not use the same signature scheme. The
-NuCRM → AbetAPI direction is drop-in (NuCRM's signer and this receiver agree
-byte for byte). The other direction is documented in full so an integrator can
+NuCRM → AbetAPI direction is drop-in: NuCRM signs `sha256=<HMAC of the raw
+body>` with the per-integration secret, and this receiver verifies exactly
+that and nothing else — every real-delivery test in this document is written
+against what NuCRM's `fireWebhooks` actually puts on the wire (measured
+against its `main`, 24 Oct 2026), not against what an integrator must
+hand-configure. The other direction is documented in full so an integrator can
 verify it, but its construction is ours and a receiver has to expect it.
 
 ---
@@ -16,7 +20,9 @@ verify it, but its construction is ours and a receiver has to expect it.
 
 ```
 NuCRM tenant ──webhook(POST)──▶ /api/v1/inbound/nucrm/{source}
-                                   │  verify x-nucrm-signature + API key
+                                   │  verify x-nucrm-signature (the signature
+                                   │  alone authenticates; a Bearer key, when
+                                   │  one is sent, must also pass)
                                    │  dedupe on x-nucrm-delivery
                                    ▼
                               matching subscriptions
@@ -28,14 +34,20 @@ NuCRM tenant ──webhook(POST)──▶ /api/v1/inbound/nucrm/{source}
 1. **AbetAPI dashboard → Connect NuCRM → Add source.** Name it (e.g. "NuCRM
    production"). The endpoint URL and the source secret are shown **once**.
 2. **NuCRM → Settings → Integrations → Webhooks** (the tenant's integration
-   webhook). Configure:
+   webhook). Its config is `{ url, events, secret }` — measured against
+   NuCRM's `app/api/tenant/webhooks/route.ts` on `main` (24 Oct 2026), there
+   is **no custom-header field**, which is why the signature alone must (and
+   does) authenticate the bridge. Configure:
    - **URL**: the endpoint from step 1,
      `https://your-abetapi.example/api/v1/inbound/nucrm/<source-id>`.
-   - **Custom headers**: `Authorization: Bearer <an AbetAPI key>` — mint one
-     with the `events:write` scope.
    - **Secret**: the source secret from step 1, unchanged.
    - **Events**: subscribe to the ones you want forwarded (`contact.created`,
      `deal.won`, …). An empty list means every event.
+
+   A relay or forwarder posting on NuCRM's behalf *may* add
+   `Authorization: Bearer <an AbetAPI key>` with the `events:write` scope;
+   when a key is sent it must authenticate and the source must live in its
+   workspace. NuCRM itself never sends one.
 3. Subscribe AbetAPI webhooks (below, `/api/webhooks`) to the events you care
    about, or use one empty filter to receive everything.
 4. Press NuCRM's test button. Within seconds the event shows up as deliveries
@@ -58,9 +70,17 @@ Headers:
 
 | Header | Meaning |
 |---|---|
-| `x-nucrm-signature` | `sha256=<hex>`, HMAC-SHA256 over the exact body keyed by the source secret. The `sha256=` prefix is optional — both spellings verify. |
-| `x-nucrm-delivery` | NuCRM's delivery id, stable across its retries. A repeat of one already accepted answers `200 {duplicate: true}` and publishes nothing. |
-| `authorization` | `Bearer <AbetAPI key>` with `events:write` — required, and it is what scope the event to a workspace. |
+| `x-nucrm-signature` | `sha256=<hex>`, HMAC-SHA256 over the exact body keyed by the source secret. The `sha256=` prefix is optional — both spellings verify. `x-webhook-signature` (NuCRM's plugin-receiver convention) is accepted identically. |
+| `x-nucrm-delivery` | NuCRM's delivery id, stable across its retries. A repeat of one already accepted answers `200 {duplicate: true}` and publishes nothing. `x-webhook-delivery` is read too. |
+| `authorization` | `Bearer <AbetAPI key>` with `events:write` — **optional**. NuCRM's integration webhook cannot send it; a forwarder may. When present it must authenticate. |
+
+One measured quirk to build against: NuCRM's **retry** deliveries re-serialize
+the payload from its JSONB column (`retryWebhookItem`, `JSON.stringify
+(item.payload)`) while replaying the original signature header — key order and
+number formatting can change, so a retry's signature may not verify byte for
+byte even though the delivery id does. That is exactly why dedupe keys on
+`x-nucrm-delivery`, and why a first attempt that verified already covers the
+event: a failed verification on a *repeat* is NuCRM's, not your misconfiguration.
 
 ### What AbetAPI answers
 
@@ -68,7 +88,7 @@ Headers:
 |---|---|
 | `202` | Accepted. Receipt: `{ event, delivered, retrying, skipped, accepted }` — identical to `POST /api/v1/events`. |
 | `200` | `{ duplicate: true, … }` — this delivery id was already accepted; nothing was published again. |
-| `401` | No/unknown key, or the signature does not verify. NuCRM will retry five times and park it; fix the secret and re-send from NuCRM's delivery log. |
+| `401` | The signature does not verify — or a Bearer key was sent and did not authenticate. NuCRM will retry five times and park it; fix the secret and re-send from NuCRM's delivery log. |
 | `409` | The source is paused. Re-enable it in the dashboard; the retry (or a re-send) will land. |
 | `422` | Valid JSON whose fields are wrong — `error.fields` names them. |
 
@@ -98,16 +118,19 @@ SOURCE_ID=<printed by seed>
 SECRET='<printed by seed>'
 BODY='{"event":"contact.created","timestamp":"2026-10-16T09:00:00.000Z","tenant_id":"t_1","data":{"contact":{"id":"c_1"}}}'
 SIG=$(printf %s "$BODY" | openssl dgst -sha256 -hmac "$SECRET" -hex | awk '{print $2}')
-KEY='<the demo key printed by the seed>'
 
 curl -sS -w '\n%{http_code}\n' -X POST \
   "http://localhost:3700/api/v1/inbound/nucrm/$SOURCE_ID" \
-  -H "Authorization: Bearer $KEY" \
   -H "content-type: application/json" \
   -H "x-nucrm-signature: sha256=$SIG" \
   -H "x-nucrm-delivery: 11111111-1111-1111-1111-111111111111" \
   -d "$BODY"
 ```
+
+No key, no headers beyond those three: this is exactly what NuCRM sends, and
+it is the shape the bridge was measured against. Add
+`-H "Authorization: Bearer $KEY"` (the demo key printed by the seed) to see
+the relay door — same answer, plus key-scoped quota and audit.
 
 Run it twice: the second answer is `200 {"duplicate":true,…}` and nothing fans
 out again.
@@ -148,11 +171,21 @@ timestamp + "." + body)`. A receiver built against NuCRM's body-only plugin
 verifier therefore cannot validate our deliveries as-is: adapt with a
 forwarder that re-signs, or use path **(a)**.
 
-Envelope both directions share:
+Envelopes — each direction, as measured, not as assumed:
 
-```json
+```jsonc
+// NuCRM → us (§1, verbatim from its fireWebhooks)
+{ "event": "contact.created", "timestamp": "2026-10-16T09:00:00.000Z", "tenant_id": "t_1", "data": { } }
+
+// us → anyone (§2, ours)
 { "id": "…", "event": "contact.created", "timestamp": 1760605200, "data": { } }
 ```
+
+NuCRM sends an **ISO** `timestamp` and a `tenant_id`; we send **unix seconds**
+and no tenant field. Inbound `timestamp` and `tenant_id` are declared and
+validated but not interpreted or forwarded — the fan-out re-stamps the event,
+and subscribers see `{ id, event, timestamp, data }`. Multi-tenant NuCRM
+installations that need the tenant downstream should put it in `data`.
 
 ---
 
@@ -186,8 +219,10 @@ subscribe here empty.
 
 | Symptom | Likely cause |
 |---|---|
-| Every delivery `401` | The secret pasted into NuCRM is not the source's secret (it was re-created) — or the custom `Authorization` header is missing. |
-| `404` | The URL's source id belongs to a different workspace than the API key's. The endpoint is workspace-scoped on purpose. |
+| Every delivery `401` | The secret pasted into NuCRM is not the source's secret (it was re-created). No `Authorization` header is required — NuCRM cannot send one. |
+| NuCRM marks every delivery `dead_letter` without a request arriving | Its `safeFetch` refuses private and reserved targets (SSRF guard, on first send *and* on every retry). The bridge must be on a public HTTPS address. |
+| Retries `401` after the first attempt verified | NuCRM re-signs nothing on retry; the JSONB round-trip changed the bytes. Dedupe on `x-nucrm-delivery` covers it — see §1's quirk note. |
+| `404` | No source with the id in the URL. With a Bearer key sent: the id exists but belongs to a different workspace than the key's — that scoping is on purpose. |
 | `409` after working | The source was paused (dashboard), or NuCRM is pointed at a deleted source's id. |
 | `422` naming `event` | NuCRM payload body empty or field renamed — check which integration fired. |
 | Duplicates despite dedupe | The sender is not NuCRM's webhook integration (no `x-nucrm-delivery`), or it re-uses a delivery id for different events. |
