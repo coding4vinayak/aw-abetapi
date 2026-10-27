@@ -231,12 +231,15 @@ integration webhook at a source (dashboard → **Connect NuCRM**) and every
 verified event is republished to matching subscriptions — one Delivery per
 subscriber, with the retries, receipts and audit trail above.
 
-The request carries two credentials on purpose. Your workspace key
-(`Authorization: Bearer …`, scope `events:write`) is the tenant, the quota and
-the audit trail; `x-nucrm-signature` — HMAC-SHA256 over the exact body keyed by
-the source's secret, the `sha256=` prefix optional — is what proves the body is
-NuCRM's. NuCRM's integration config sends custom headers, so both travel in one
-configured webhook.
+The signature is the authentication. `x-nucrm-signature` — HMAC-SHA256 over
+the exact body keyed by the source's secret, the `sha256=` prefix optional —
+proves the body is NuCRM's, and the source id in the URL selects the
+workspace. NuCRM's integration webhook config carries `{ url, events, secret }`
+and no custom-header field (measured against its `main`), so it can never send
+an API key; demanding one made the bridge undeliverable. A forwarder relaying
+on NuCRM's behalf may add your workspace key (`Authorization: Bearer …`, scope
+`events:write`) — when sent, it must authenticate and the source must live in
+its workspace, and the key carries quota and attribution.
 
 NuCRM retries its webhooks, so `x-nucrm-delivery` deduplicates: a repeat of a
 delivery id already accepted answers `200 {duplicate: true}` and publishes

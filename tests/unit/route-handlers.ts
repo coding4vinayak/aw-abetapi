@@ -218,7 +218,12 @@ export interface CallSite {
 }
 
 export const AUTH_NAME =
-  /\b(?:requireApiKey|authedWorkspaceId|assertOwns|getSession|requireSession|requireKey|verifyInboundWebhook|verifySignature|verifyWebhook|resolveAiActor|withAiAuth)\b/;
+  /\b(?:requireApiKey|authedWorkspaceId|assertOwns|getSession|requireSession|requireKey|verifyInboundWebhook|verifyInboundSignature|verifySignature|verifyWebhook|resolveAiActor|withAiAuth)\b/;
+// verifyInboundSignature joined the list with the NuCRM bridge's signature-only
+// door (Oct 2026): there, the HMAC over the raw body keyed by the source secret
+// IS the authentication — the sender proves the secret and nothing else stands
+// between a request and a write. Leaving it out would make the bridge's guarded
+// writes look unguarded to this scanner, i.e. a false alarm, not a real hole.
 const WRITE_NAME = /\b(?:prisma|tx)\s*\.\s*[A-Za-z0-9_]+\s*\.\s*(?:create|createMany|update|updateMany|delete|deleteMany|upsert)\b/;
 
 /**

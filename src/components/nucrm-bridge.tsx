@@ -165,13 +165,13 @@ export function NucrmBridge({ sources, origin, create, toggle, remove }: Props) 
               </div>
             </li>
             <li>
-              Add the custom header{" "}
-              <code className="font-mono text-[12px]">Authorization: Bearer &lt;your AbetAPI key&gt;</code> — the key
-              needs the <code className="font-mono text-[12px]">events:write</code> scope.
+              Set the webhook&apos;s signing secret below — NuCRM sends no other credential, and this signature alone
+              authenticates the delivery. (A relay posting on NuCRM&apos;s behalf may also send{" "}
+              <code className="font-mono text-[12px]">Authorization: Bearer &lt;key&gt;</code> with{" "}
+              <code className="font-mono text-[12px]">events:write</code>; when sent, it must be valid.)
             </li>
             <li>
-              Set the webhook&apos;s signing secret to this value — it is shown once, and losing it means migrating to
-              a new source:
+              Set it to this value — shown once, and losing it means migrating to a new source:
               <div className="mt-1 flex items-center gap-2">
                 <code
                   className="overflow-x-auto whitespace-nowrap rounded-md border border-emerald-300 bg-white px-2 py-1 font-mono text-[12px] text-gray-900"

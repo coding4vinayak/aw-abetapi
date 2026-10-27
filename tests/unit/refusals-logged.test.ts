@@ -46,6 +46,16 @@ const NO_WORKSPACE: Record<string, string> = {
     "session-authenticated export door; no API key to attribute — the request log is for keyed traffic",
 };
 
+/**
+ * A refusal that provably has no workspace to attribute it to, marked at its
+ * own line with `unlogged: <reason>` on the line ABOVE the response. File-level
+ * exemptions would excuse every other refusal in the same route, and the NuCRM
+ * bridge logs all of its others (`notFound` and `logRequest` in its body) — so
+ * the exemption is narrowed to the line, and the reason must be readable from
+ * that line too. No marker may go stale: an unlogged line needs the comment.
+ */
+const UNLOGGED = /^\s*(?:\/\/|\*)\s*unlogged:/;
+
 function* routeFiles(dir: string): Generator<string> {
   for (const name of readdirSync(dir)) {
     const path = join(dir, name);
@@ -65,6 +75,7 @@ test("every 4xx/5xx literal in an authed route has a logging call in reach", () 
       const match = /status:\s*(4\d{2}|5\d{2})/.exec(line);
       if (!match) return;
       literals += 1;
+      if (UNLOGGED.test(lines[i - 1] ?? "")) return;
       const lookback = lines.slice(Math.max(0, i - WINDOW), i + 1).join("\n");
       if (!/refused\(|logSuccess\(|await log\(/.test(lookback)) {
         missing.push(`${relative}:${i + 1} (status ${match[1]})`);
