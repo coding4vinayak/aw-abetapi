@@ -93,6 +93,10 @@ export async function attemptDelivery(
           "x-abetapi-event": delivery.event,
           "x-abetapi-timestamp": timestamp,
           "x-abetapi-signature": signature,
+          // X-Webhook-Timestamp: freshness check (5-min window when present).
+          // X-Webhook-Delivery: dedup key (the payload id, inside the signed body).
+          "x-webhook-timestamp": timestamp,
+          "x-webhook-delivery": delivery.id,
           // The idempotency key. At-least-once delivery means the receiver will
           // see this more than once; this is how it knows to process it once.
           "x-abetapi-delivery": delivery.id,
